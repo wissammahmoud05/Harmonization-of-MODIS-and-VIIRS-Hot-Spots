@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/burnwise-step6-map/browser",
+  "rewrites": [{ "source": "/((?!data/|.*\\..*).*)", "destination": "/index.html" }]
+}
