@@ -5,9 +5,9 @@ Project of **Team Foul & Fire** for **NASA Space Apps Cairo 2026** (challenge: *
 
 ## Links & Demos
 
-Live Web App (Server): Open Live App
-App Walkthrough / Demo Video: Watch App Demo
-YouTube Project Explanation: Watch Explanation on YouTube
+Live Web App (Server): https://new-burnwise-4tvx.vercel.app/dashboard
+App Walkthrough / Demo Video:https://drive.google.com/file/d/1EE9qZfw9YZ1pTFKK1D-8JcT51E600CeC/view
+YouTube Project Explanation: https://youtu.be/G6_1jqzwgX8?si=X3X7KHaKdmWozQ9S
 
 ## The problem
 
