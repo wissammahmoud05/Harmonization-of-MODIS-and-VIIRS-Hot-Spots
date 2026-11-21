@@ -1,127 +1,89 @@
-# 🔥 Burnwise: Harmonization of MODIS and VIIRS Hot Spots
+# Burnwise: Harmonization of MODIS and VIIRS Hot Spots
 
-**NASA Space Apps Cairo 2026 · Team "Foul & Fire"**
+A harmonized burning-activity calendar for Egypt, built from NASA FIRMS satellite fire data.
+Project of **Team Foul & Fire** for **NASA Space Apps Cairo 2026** (challenge: *Harmonization of MODIS and VIIRS Hot Spots*).
 
-Burnwise is a web application that merges two decades of satellite active-fire records (MODIS and VIIRS) into one consistent **burning activity calendar**. It helps emergency responders, scientists, and land managers answer one question quickly: **"Is this fire season unusual?"**
+## Links & Demos
 
----
+Live Web App (Server): Open Live App
+App Walkthrough / Demo Video: Watch App Demo
+YouTube Project Explanation: Watch Explanation on YouTube
 
-## The Problem
+## The problem
 
-MODIS (since 2000, 1 km) and VIIRS (since 2012, 375 m) detect fires at different resolutions, so simply joining them creates a false jump. In our Egypt data, VIIRS records 8,605 vegetation hotspots in 2013 against 597 for MODIS in 2012, a **+1,341% rise that is a sensor artifact, not a fire season**.
+NASA satellites have detected active-fire hotspots for 20+ years with two sensors: **MODIS** (since 2000, 1 km) and **VIIRS** (since 2012, 375 m). Their counts cannot be compared directly, because the sensors differ in resolution, sensitivity and observation schedule. VIIRS records far more small fires, so simply merging the two files creates an artificial jump in 2013 (+1,341% in our Egypt data, see the proposal). Fire managers therefore lack one consistent history of when and where burning happens.
 
-On top of that, 69% of Egyptian VIIRS detections (and 40% of MODIS) are not vegetation fires (gas flares, industry), which hides the seasonal burning that matters.
+## What we built
 
-## What Burnwise Does
+1. **Data pipeline and harmonization** (`notebooks/Burnwise_pipeline.ipynb`): cleaning, gridding, two harmonization methods, validation.
+2. **Web app** (`burnwise-app/`): select an area and dates, see a burning calendar, compare each month with its historical median, download results. See `burnwise-app/README.md` for how to run it.
+3. **Documents** (`docs/`): the full proposal and the demo slides.
 
-- **Harmonizes** MODIS and VIIRS into one series (283 months, Jan 2003 to Jul 2026)
-- **Filters** to vegetation fires only (FIRMS type 0) with a confidence filter
-- **Select an area** on a Leaflet map (draw a rectangle or type coordinates) and a year range
-- **Burning calendar**: year × month heat map using the color-blind-safe viridis ramp
-- **Historical comparison**: each month versus the historical median, with an anomaly view (diverging blue–red ramp)
-- **Early-warning alerts**: five levels based on a robust z-score
-- **High-risk clusters**: HDBSCAN groups monthly hotspots into clusters ranked by fire radiative power
-- **Export**: CSV of the monthly table, and PNG of the calendar and chart
+## Method (summary)
 
-## Data
+| Step | What we did |
+|---|---|
+| Data | NASA FIRMS archive for Egypt: MODIS Collection 6.1 (Terra, Aqua) and VIIRS S-NPP 375 m |
+| Cleaning | 2003 to Jul 2026; duplicates removed; FIRMS type 0 (presumed vegetation fire) only; low-confidence detections removed (MODIS < 30, VIIRS "low") |
+| Grid | 0.25 degree cells, monthly counts, empty months set to zero (481 cells x 283 months = 136,123 rows) |
+| Quality check | 8 grid cells with non-seasonal, MODIS-only growth excluded from both sensors |
+| Harmonization | (a) constant VIIRS/MODIS ratio (13.43), (b) Random Forest (150 trees, depth 12; features: cell location, month, MODIS count), both fitted on the 2013-2022 overlap and applied to MODIS before 2013; real VIIRS from 2013 |
+| Analytics | Median per cell and calendar month over complete years (2003-2025); anomaly = count minus median |
 
-| Sensor | Source | Detections | Period |
-|---|---|---|---|
-| MODIS Collection 6.1 (Terra + Aqua, 1 km) | NASA FIRMS | 34,956 | Nov 2000 – Aug 2026 |
-| VIIRS S-NPP 375 m | NASA FIRMS | 482,784 | Jan 2012 – Jul 2026 |
-
-Coverage is all of Egypt, with the **Nile Delta** (30.0–31.75°N, 29.5–32.5°E) as the study site. The raw files are included in this repository. Source: [NASA FIRMS Archive](https://firms.modaps.eosdis.nasa.gov/).
-
-## Pipeline
-
-```
-FIRMS archive → cleaning → 0.25° monthly grid → harmonization
-  (Random Forest, ratio as baseline) → harmonized_monthly.csv → API → web app
-```
-
-1. **Cleaning**: remove duplicates, keep 2003-01-01 onward, keep vegetation fires only, apply confidence filter (MODIS ≥ 30; VIIRS nominal or high). Eight grid cells with extreme MODIS growth are excluded.
-2. **Grid**: detections counted per 0.25° cell (~27 km) per month, with empty months filled as zeros (481 cells × 283 months = 136,123 rows).
-3. **Harmonization**, fitted on the 2013–2022 overlap and applied to MODIS counts before 2013:
-   - **Ratio baseline**: constant VIIRS/MODIS ratio (13.43)
-   - **Random Forest**: 150 trees, depth 12, predicts monthly VIIRS count from MODIS count, month, and location (SHAP used for inspection)
-4. **Analytics**: monthly medians (2003–2025), anomaly = count − median, robust z-score alerts, HDBSCAN clustering.
+Cleaning counts (MODIS / VIIRS): raw 34,956 / 482,784, date window 33,318 / 482,783, vegetation fires only 20,145 / 150,033, confidence filter 19,031 / 136,019. The type filter removes 39.5% of MODIS and 68.9% of VIIRS detections (mostly static sources such as gas flares).
 
 ## Results
 
-| Method | 2012→2013 jump | Leave-one-year-out error (2013–2022) | Holdout error 2023–2025 |
-|---|---|---|---|
-| Raw merge | +1,341% | – | – |
-| Constant ratio (13.43) | +7.3% | 17.6% | 56.5% |
-| **Random Forest** | **−11.6%** | **9.1%** | **31.5%** |
-| Climatology baseline | – | – | 32.2% |
+Error of the predicted VIIRS yearly total for Egypt (lower is better):
 
-- Both methods remove more than 99% of the artificial jump.
-- The Delta holds 41% of Egypt's vegetation hotspots in 15% of grid cells, and its October median is **4.3×** the average of other months (the rice-straw "black cloud" season).
+| Method | Leave-one-year-out 2013-2022 | Hold-out 2023-2025 (never used for fitting) |
+|---|---|---|
+| Constant ratio (baseline) | 17.6% | 56.5% |
+| Random Forest | **9.1%** | **31.5%** |
+| VIIRS-only climatology (ignores MODIS) | 9.8% | 32.2% |
 
-### Alert levels
-
-Robust z-score = 0.6745 × (value − median) / MAD, compared with the same month in other years:
-
-| Level | Threshold |
-|---|---|
-| Watch | ≥ 1 |
-| High | ≥ 2 |
-| Critical | ≥ 3 |
-| Unusually low | ≤ −2 |
+Hold-out error by year (2023 / 2024 / 2025): Random Forest 10.3% / 25.0% / 59.2%, ratio 40.1% / 30.4% / 98.9%, climatology 3.2% / 29.4% / 64.0%.
+The 2012 to 2013 jump shrinks from +1,341% (raw merge) to +7.3% (ratio) and -11.6% (Random Forest).
 
 ## Limitations
 
-We report these openly:
+- The Random Forest clearly beats the constant ratio, but **not clearly the climatology baseline** in 2023-2025, so much of its skill may come from learning typical spatial and seasonal patterns, not from the MODIS counts.
+- **2025 fails for every method.** VIIRS counts fell sharply while MODIS did not; we have not found the cause.
+- Pre-2013 values cannot be validated (no VIIRS), and the Random Forest smooths pre-2013 yearly variability, so extreme years are probably understated.
+- The 8 excluded cells were chosen using 2018-2024 behaviour, which can make validation look better than it is.
+- Errors are measured on Egypt-wide totals; single cells are much noisier. 2026 covers January to July only. MODIS and VIIRS type and confidence classes are defined differently, so the filters are approximate.
 
-- In 2023–2025 the Random Forest does **not clearly beat** a simple climatology baseline (31.5% vs 32.2%).
-- **2025 fails for every method**; VIIRS counts fell 41% between 2023 and 2025 and we have not tested the cause.
-- The Random Forest smooths pre-2013 variability (5.9% vs 11.5% for real VIIRS), so extreme early years are probably understated.
-- Excluding eight cells used 2018–2024 behaviour, so the headline holdout figure is probably optimistic (about 43% without the exclusion).
-- Validation is on Egypt-wide totals; Delta-only and single-cell accuracy were not validated. 2026 covers January–July only.
-- Persistent heat sources labelled as vegetation can survive filtering, and alert thresholds are not yet calibrated against known events.
+## Repository structure
 
-## Tech Stack
-
-- **Data and modelling**: Python, pandas, NumPy, scikit-learn, SHAP, HDBSCAN, Google Colab
-- **Backend**: FastAPI (reads the harmonized CSV once and answers area and date queries)
-- **Frontend**: Leaflet, leaflet-draw, Chart.js
-
-## Getting Started
-
-> Adjust the file names and commands below to match your repository structure.
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/yomnamohamed07/new-Burnwise.git
-cd new-Burnwise
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Run the API (replace main:app with your actual module)
-uvicorn main:app --reload
-
-# 4. Open the web app in your browser
-# http://127.0.0.1:8000
+```
+notebooks/   data pipeline, harmonization and validation (Colab notebook)
+burnwise-app/ web app (Angular); reads the harmonized CSV in public/data/
+docs/        proposal and demo slides (PDF)
+Naca_Space_Cairo_datasets.zip   raw FIRMS downloads for Egypt (MODIS and VIIRS)
 ```
 
-## Team "Foul & Fire"
+## How to reproduce
+
+1. Open `notebooks/Burnwise_pipeline.ipynb` in Google Colab.
+2. Upload the FIRMS archive files from the data zip (or download them again from [NASA FIRMS Archive Download](https://firms.modaps.eosdis.nasa.gov/): country Egypt, MODIS and VIIRS S-NPP, 2000-11-01 to 2026-10-31).
+3. Set the file names at the top of the notebook and run all cells.
+4. The notebook writes the harmonized monthly table that the app reads.
+
+## Team
 
 | Member | Role |
 |---|---|
-| Eman Mohammed Essa | Data engineering and harmonization |
-| Wissam Mahmoud | AI modelling and analytics |
-| Yomna Mohamed | Backend, frontend, and repository |
+| Eman Mohammed Essa | Data engineering and harmonization: FIRMS download, cleaning, grid aggregation, ratio baseline, validation |
+| Wissam Mahmoud | AI modelling and analytics: Random Forest, SHAP, hold-out tests, anomaly alerts |
+| Yomna Mohamed | Web app and interface: map, calendar, charts, CSV export |
 
-## AI Assistance
+## Data and credits
 
-A generative AI assistant (Claude, by Anthropic) helped draft and debug code, suggest validation baselines, and edit the proposal. The team ran all code, checked the numbers against the outputs, and made every decision.
+- **NASA Earthdata FIRMS** (Fire Information for Resource Management System): MODIS C6.1 and VIIRS S-NPP 375 m active-fire archive. https://www.earthdata.nasa.gov/data/tools/firms
+- Giglio, L., Schroeder, W., Justice, C. O. (2016). The collection 6 MODIS active fire detection algorithm and fire products. *Remote Sensing of Environment*, 178, 31-41.
+- Schroeder, W., Oliva, P., Giglio, L., Csiszar, I. A. (2014). The New VIIRS 375 m active fire detection data product. *Remote Sensing of Environment*, 143, 85-96.
+- Python: pandas, NumPy, scikit-learn, SHAP, Matplotlib. Google Colab.
 
-## References
+## Use of AI
 
-1. L. Giglio, W. Schroeder, C. O. Justice, "The Collection 6 MODIS active fire detection algorithm and fire products," *Remote Sens. Environ.*, 2016. doi:10.1016/j.rse.2016.02.054
-2. W. Schroeder et al., "The New VIIRS 375 m active fire detection data product," *Remote Sens. Environ.*, 2014. doi:10.1016/j.rse.2013.12.008
-3. M. J. Wooster et al., "Satellite remote sensing of active fires: History and current status," *Remote Sens. Environ.*, 2021. doi:10.1016/j.rse.2021.112694
-4. H. S. Marey et al., "Study of the formation of the 'black cloud' and its dynamics over Cairo, Egypt, using MODIS and MISR sensors," *J. Geophys. Res. Atmos.*, 2010. doi:10.1029/2010JD014384
-5. L. McInnes, J. Healy, S. Astels, "hdbscan: Hierarchical density based clustering," *JOSS*, 2017. doi:10.21105/joss.00205
-6. NASA FIRMS: https://firms.modaps.eosdis.nasa.gov/
+Parts of the code and documentation were developed with the assistance of **Claude (Anthropic)**: planning the approach, drafting and reviewing code, suggesting validation baselines, and editing text. The team ran the code on the real NASA data, checked the outputs, and made the final decisions. Machine learning (a scikit-learn Random Forest) is also part of the solution itself.
